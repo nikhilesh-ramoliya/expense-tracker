@@ -3,11 +3,14 @@
 import { FormEvent, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/providers";
+import { markPasswordRecovery } from "@/lib/password-recovery";
 import { createClient } from "@/utils/supabase/client";
 
 export function UpdatePasswordScreen({ linkError = false }: { linkError?: boolean }) {
   const formId = useId();
   const router = useRouter();
+  const { finishPasswordRecovery, signOut } = useAuth();
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const [error, setError] = useState(linkError ? "This reset link is invalid or expired." : "");
@@ -17,8 +20,31 @@ export function UpdatePasswordScreen({ linkError = false }: { linkError?: boolea
     const supabase = createClient();
     let cancelled = false;
 
-    async function hydrate(code: string | null) {
-      if (code) {
+    async function hydrate() {
+      const query = new URLSearchParams(window.location.search);
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const code = query.get("code");
+      const accessToken = fragment.get("access_token");
+      const refreshToken = fragment.get("refresh_token");
+      const type = fragment.get("type") ?? query.get("type");
+
+      if (type === "recovery") markPasswordRecovery();
+
+      if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (cancelled) return;
+        if (sessionError) {
+          setError("This reset link is invalid or expired.");
+          setHasSession(false);
+          setReady(true);
+          return;
+        }
+        markPasswordRecovery();
+        window.history.replaceState(null, "", "/auth/update-password");
+      } else if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (cancelled) return;
         if (exchangeError) {
@@ -27,21 +53,26 @@ export function UpdatePasswordScreen({ linkError = false }: { linkError?: boolea
           setReady(true);
           return;
         }
+        markPasswordRecovery();
         window.history.replaceState(null, "", "/auth/update-password");
       }
+
       const { data } = await supabase.auth.getUser();
       if (cancelled) return;
       setHasSession(Boolean(data.user));
       setReady(true);
     }
 
-    const params = new URLSearchParams(window.location.search);
-    void hydrate(params.get("code"));
+    void hydrate();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || session?.user) {
+      if (event === "PASSWORD_RECOVERY") {
+        markPasswordRecovery();
+        setHasSession(true);
+        setReady(true);
+      } else if (session?.user) {
         setHasSession(true);
         setReady(true);
       }
@@ -75,7 +106,13 @@ export function UpdatePasswordScreen({ linkError = false }: { linkError?: boolea
       setError(updateError.message || "Could not update your password.");
       return;
     }
+    finishPasswordRecovery();
     router.replace("/dashboard");
+  }
+
+  function onCancel() {
+    signOut();
+    router.replace("/");
   }
 
   return (
@@ -138,6 +175,9 @@ export function UpdatePasswordScreen({ linkError = false }: { linkError?: boolea
             ) : null}
             <button type="submit" className="add-btn full" disabled={pending}>
               {pending ? "Working…" : "Update password"}
+            </button>
+            <button type="button" className="text-btn" onClick={onCancel} disabled={pending}>
+              Cancel and sign out
             </button>
           </form>
         ) : null}

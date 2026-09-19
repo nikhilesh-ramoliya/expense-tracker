@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers";
 
 export function LoginScreen() {
-  const { ready, session, signIn, signUp, resendConfirmation } = useAuth();
+  const { ready, session, passwordRecovery, signIn, signUp, resendConfirmation } = useAuth();
   const router = useRouter();
   const formId = useId();
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -16,8 +16,13 @@ export function LoginScreen() {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    if (ready && session) router.replace("/dashboard");
-  }, [ready, session, router]);
+    if (!ready) return;
+    if (passwordRecovery) {
+      router.replace("/auth/update-password");
+      return;
+    }
+    if (session) router.replace("/dashboard");
+  }, [ready, session, passwordRecovery, router]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

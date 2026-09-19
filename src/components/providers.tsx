@@ -10,7 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { createEmptyState } from "@/lib/seed";
+import {
+  clearPasswordRecoveryFlag,
+  hasPasswordRecoveryFlag,
+  markPasswordRecovery,
+  urlLooksLikeRecovery,
+} from "@/lib/password-recovery";
 import { loadLedgerState, saveLedgerState, wipeLedgerState } from "@/lib/supabase/ledger";
 import type { LedgerState, Session, ThemeMode } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
@@ -24,9 +31,11 @@ export type SignUpOutcome =
 type AuthContextValue = {
   ready: boolean;
   session: Session | null;
+  passwordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string) => Promise<SignUpOutcome>;
   resendConfirmation: (email: string) => Promise<string | null>;
+  finishPasswordRecovery: () => void;
   signOut: () => void;
 };
 
@@ -53,11 +62,28 @@ function authMessage(error: { message?: string } | null, fallback: string) {
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const pathname = usePathname();
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [ledgerReady, setLedgerReady] = useState(false);
   const [state, setLedgerState] = useState<LedgerState>(createEmptyState);
   const persistGen = useRef(0);
+
+  useEffect(() => {
+    if (hasPasswordRecoveryFlag() || urlLooksLikeRecovery()) {
+      markPasswordRecovery();
+      setPasswordRecovery(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pathname?.startsWith("/auth/update-password")) {
+      markPasswordRecovery();
+      setPasswordRecovery(true);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +97,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, next) => {
+    } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === "PASSWORD_RECOVERY") {
+        markPasswordRecovery();
+        setPasswordRecovery(true);
+        if (window.location.pathname !== "/auth/update-password") {
+          router.replace("/auth/update-password");
+        }
+      }
       const user = next?.user;
       setSession(user ? { userId: user.id, email: user.email ?? "" } : null);
       setAuthReady(true);
@@ -81,10 +114,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, router]);
 
   useEffect(() => {
-    if (!session) {
+    if (!session || passwordRecovery) {
       setLedgerReady(false);
       return;
     }
@@ -110,10 +143,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session, supabase]);
+  }, [session, passwordRecovery, supabase]);
 
   useEffect(() => {
-    if (!session || !ledgerReady) return;
+    if (!session || !ledgerReady || passwordRecovery) return;
     applyTheme(state.settings.theme);
     const gen = ++persistGen.current;
     const timer = window.setTimeout(() => {
@@ -122,7 +155,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [session, state, ledgerReady, supabase]);
+  }, [session, state, ledgerReady, passwordRecovery, supabase]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -195,7 +228,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
     [supabase],
   );
 
+  const finishPasswordRecovery = useCallback(() => {
+    clearPasswordRecoveryFlag();
+    setPasswordRecovery(false);
+  }, []);
+
   const signOut = useCallback(() => {
+    clearPasswordRecoveryFlag();
+    setPasswordRecovery(false);
     void supabase.auth.signOut();
     setSession(null);
   }, [supabase]);
@@ -215,8 +255,26 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, [session, supabase]);
 
   const authValue = useMemo(
-    () => ({ ready: authReady, session, signIn, signUp, resendConfirmation, signOut }),
-    [authReady, session, signIn, signUp, resendConfirmation, signOut],
+    () => ({
+      ready: authReady,
+      session,
+      passwordRecovery,
+      signIn,
+      signUp,
+      resendConfirmation,
+      finishPasswordRecovery,
+      signOut,
+    }),
+    [
+      authReady,
+      session,
+      passwordRecovery,
+      signIn,
+      signUp,
+      resendConfirmation,
+      finishPasswordRecovery,
+      signOut,
+    ],
   );
 
   const ledgerValue = useMemo(

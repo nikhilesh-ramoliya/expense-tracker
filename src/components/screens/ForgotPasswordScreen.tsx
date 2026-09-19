@@ -2,6 +2,7 @@
 
 import { FormEvent, useId, useState } from "react";
 import Link from "next/link";
+import { passwordResetRedirectTo } from "@/lib/site-url";
 import { createClient } from "@/utils/supabase/client";
 
 const GENERIC_SENT =
@@ -26,9 +27,8 @@ export function ForgotPasswordScreen() {
       return;
     }
     const supabase = createClient();
-    const origin = window.location.origin;
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin}/auth/update-password`,
+      redirectTo: passwordResetRedirectTo(),
     });
     setPending(false);
     if (resetError) {
