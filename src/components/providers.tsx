@@ -15,11 +15,18 @@ import { loadLedgerState, saveLedgerState, wipeLedgerState } from "@/lib/supabas
 import type { LedgerState, Session, ThemeMode } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
 
+export type SignUpOutcome =
+  | { status: "ok" }
+  | { status: "error"; message: string }
+  | { status: "exists"; message: string }
+  | { status: "confirm"; message: string; email: string };
+
 type AuthContextValue = {
   ready: boolean;
   session: Session | null;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string) => Promise<string | null>;
+  signUp: (email: string, password: string) => Promise<SignUpOutcome>;
+  resendConfirmation: (email: string) => Promise<string | null>;
   signOut: () => void;
 };
 
@@ -140,23 +147,49 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
 
   const signUp = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<SignUpOutcome> => {
       const normalized = email.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-        return "Enter a valid email address.";
+        return { status: "error", message: "Enter a valid email address." };
       }
       if (password.length < 8) {
-        return "Use at least 8 characters for your password.";
+        return { status: "error", message: "Use at least 8 characters for your password." };
       }
       const { data, error } = await supabase.auth.signUp({
         email: normalized,
         password,
       });
-      if (error) return authMessage(error, "Could not create that account.");
-      if (!data.session || !data.user) {
-        return "Check your email to confirm the account, then sign in.";
+      if (error) return { status: "error", message: authMessage(error, "Could not create that account.") };
+      if (data.session && data.user) {
+        setSession({ userId: data.user.id, email: data.user.email ?? normalized });
+        return { status: "ok" };
       }
-      setSession({ userId: data.user.id, email: data.user.email ?? normalized });
+      // Already-registered users get a 200 with no session (and often empty identities).
+      const identities = data.user?.identities ?? [];
+      if (!data.user || identities.length === 0 || data.user.email_confirmed_at) {
+        return {
+          status: "exists",
+          message: "This email already has an account. Sign in instead — no new confirmation email is sent.",
+        };
+      }
+      return {
+        status: "confirm",
+        email: normalized,
+        message:
+          "Confirm email is on, and this project uses Supabase’s default mailer (often delayed or filtered). Check inbox and spam for a message from noreply@mail.app.supabase.io, or resend below.",
+      };
+    },
+    [supabase],
+  );
+
+  const resendConfirmation = useCallback(
+    async (email: string) => {
+      const normalized = email.trim().toLowerCase();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: normalized,
+      });
+      if (error) return authMessage(error, "Could not resend the confirmation email.");
       return null;
     },
     [supabase],
@@ -182,8 +215,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, [session, supabase]);
 
   const authValue = useMemo(
-    () => ({ ready: authReady, session, signIn, signUp, signOut }),
-    [authReady, session, signIn, signUp, signOut],
+    () => ({ ready: authReady, session, signIn, signUp, resendConfirmation, signOut }),
+    [authReady, session, signIn, signUp, resendConfirmation, signOut],
   );
 
   const ledgerValue = useMemo(

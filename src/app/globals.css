@@ -732,6 +732,11 @@ html[data-theme="dark"] .meter {
   margin: 0.9rem 0 0;
 }
 
+.switch-auth a.text-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
 .auth-hero {
   margin-bottom: 1.2rem;
 }

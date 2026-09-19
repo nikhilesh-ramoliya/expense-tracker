@@ -1,15 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useId, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers";
 
 export function LoginScreen() {
-  const { ready, session, signIn, signUp } = useAuth();
+  const { ready, session, signIn, signUp, resendConfirmation } = useAuth();
   const router = useRouter();
   const formId = useId();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState("");
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -19,17 +22,52 @@ export function LoginScreen() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setNotice("");
+    setPendingConfirmEmail("");
     setPending(true);
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "");
     const password = String(data.get("password") ?? "");
-    const result = mode === "in" ? await signIn(email, password) : await signUp(email, password);
-    setPending(false);
-    if (result) {
-      setError(result);
+    if (mode === "in") {
+      const result = await signIn(email, password);
+      setPending(false);
+      if (result) {
+        setError(result);
+        return;
+      }
+      router.replace("/dashboard");
       return;
     }
-    router.replace("/dashboard");
+    const result = await signUp(email, password);
+    setPending(false);
+    if (result.status === "ok") {
+      router.replace("/dashboard");
+      return;
+    }
+    if (result.status === "confirm") {
+      setNotice(result.message);
+      setPendingConfirmEmail(result.email);
+      return;
+    }
+    if (result.status === "exists") {
+      setError(result.message);
+      setMode("in");
+      return;
+    }
+    setError(result.message);
+  }
+
+  async function onResend() {
+    if (!pendingConfirmEmail) return;
+    setPending(true);
+    setError("");
+    const result = await resendConfirmation(pendingConfirmEmail);
+    setPending(false);
+    setNotice(
+      result
+        ? result
+        : "If the account still needs confirming, another email was requested. Check inbox and spam.",
+    );
   }
 
   return (
@@ -76,10 +114,27 @@ export function LoginScreen() {
               {error}
             </p>
           ) : null}
+          {notice ? (
+            <p id={`${formId}-notice`} className="muted-copy" role="status">
+              {notice}
+            </p>
+          ) : null}
+          {pendingConfirmEmail ? (
+            <button type="button" className="text-btn" disabled={pending} onClick={() => void onResend()}>
+              Resend confirmation email
+            </button>
+          ) : null}
           <button type="submit" className="add-btn full" disabled={pending}>
             {pending ? "Working…" : mode === "in" ? "Sign in" : "Create account"}
           </button>
         </form>
+        {mode === "in" ? (
+          <p className="switch-auth">
+            <Link href="/auth/forgot-password" className="text-btn">
+              Forgot password?
+            </Link>
+          </p>
+        ) : null}
         <p className="switch-auth">
           {mode === "in" ? "New here?" : "Already have an account?"}{" "}
           <button
@@ -87,6 +142,8 @@ export function LoginScreen() {
             className="text-btn"
             onClick={() => {
               setError("");
+              setNotice("");
+              setPendingConfirmEmail("");
               setMode(mode === "in" ? "up" : "in");
             }}
           >

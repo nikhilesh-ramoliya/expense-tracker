@@ -2,6 +2,8 @@ import { type NextRequest } from "next/server";
 import { updateSession } from "@/utils/supabase/middleware";
 
 export async function proxy(request: NextRequest) {
+  // Refreshes cookies on every matched path, including /auth/* so PKCE
+  // recovery codes can be exchanged and written onto the response.
   return updateSession(request);
 }
 
