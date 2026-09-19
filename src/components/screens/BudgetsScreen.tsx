@@ -36,6 +36,10 @@ export function BudgetsScreen() {
       </header>
       <p className="lede">Set a monthly ceiling per category. Progress uses this period’s expenses.</p>
 
+      {expenseCats.length === 0 ? (
+        <p className="empty">No categories yet. Add them in Settings, then set envelopes here.</p>
+      ) : null}
+
       <form className="stack" onSubmit={save}>
         {expenseCats.map((c) => {
           const budget = state.budgets.find((b) => b.categoryId === c.id)?.monthlyLimit ?? 0;
@@ -76,9 +80,11 @@ export function BudgetsScreen() {
             </div>
           );
         })}
-        <button type="submit" className="add-btn full">
-          Save envelopes
-        </button>
+        {expenseCats.length > 0 ? (
+          <button type="submit" className="add-btn full">
+            Save envelopes
+          </button>
+        ) : null}
       </form>
     </>
   );

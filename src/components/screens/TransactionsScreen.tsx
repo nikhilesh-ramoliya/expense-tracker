@@ -28,6 +28,8 @@ export function TransactionsScreen() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   }, [state, query, category, from, to]);
 
+  const filtersOn = Boolean(query || category !== "all" || from || to);
+
   if (!ready) return <p className="empty">Loading activity…</p>;
 
   return (
@@ -85,7 +87,11 @@ export function TransactionsScreen() {
       </p>
 
       {list.length === 0 ? (
-        <p className="empty">Nothing matches those filters.</p>
+        <p className="empty">
+          {filtersOn
+            ? "Nothing matches those filters."
+            : "No activity yet. Add a transaction to get started."}
+        </p>
       ) : (
         <ul className="plain-list">
           {list.map((tx) => (

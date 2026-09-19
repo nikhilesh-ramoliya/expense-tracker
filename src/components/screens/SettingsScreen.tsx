@@ -3,6 +3,7 @@
 import { FormEvent, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useLedger } from "@/components/providers";
+import { CATEGORY_TEMPLATES } from "@/lib/seed";
 import { CURRENCIES, type CategoryKind, type ThemeMode } from "@/lib/types";
 
 export function SettingsScreen() {
@@ -119,6 +120,27 @@ export function SettingsScreen() {
 
       <section className="card stack">
         <h2>Categories</h2>
+        {state.categories.length === 0 ? (
+          <p className="empty">None yet. Add your own, or load empty name templates (no amounts).</p>
+        ) : null}
+        {state.categories.length === 0 ? (
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() =>
+              setState({
+                ...state,
+                categories: CATEGORY_TEMPLATES.map((c) => ({
+                  id: crypto.randomUUID(),
+                  name: c.name,
+                  kind: c.kind,
+                })),
+              })
+            }
+          >
+            Add suggested names
+          </button>
+        ) : null}
         <ul className="chip-list">
           {state.categories.map((c) => (
             <li key={c.id}>

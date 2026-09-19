@@ -41,16 +41,15 @@ export function LoginScreen() {
         <p className="eyebrow">Personal ledger</p>
         <h1 className="display">Ledger</h1>
         <p className="lede">
-          Track spend, wallets, and envelopes on your phone. New accounts start with a sample month so
-          charts are ready on day one.
+          Track spend, wallets, and envelopes on your phone. Your data lives in your account — nothing
+          is pre-filled.
         </p>
       </header>
 
       <section id="login" className="card">
         <h2>{mode === "in" ? "Sign in" : "Create account"}</h2>
         <p className="muted-copy">
-          Accounts stay on this device. Add Supabase keys later to sync — see{" "}
-          <code>.env.example</code>.
+          Sign in with email and password. New accounts start empty until you add entries.
         </p>
         <form className="sheet-form" onSubmit={onSubmit} noValidate>
           <label htmlFor={`${formId}-email`}>Email</label>

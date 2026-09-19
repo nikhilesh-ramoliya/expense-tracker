@@ -16,8 +16,8 @@ type IconName = (typeof ITEMS)[number]["icon"];
 function TabIcon({ name, filled }: { name: IconName; filled: boolean }) {
   const stroke = filled ? 0 : 1.7;
   const common = {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     viewBox: "0 0 24 24",
     "aria-hidden": true,
   } as const;

@@ -56,18 +56,22 @@ export function AccountsScreen() {
         changing your spend total.
       </p>
 
-      <ul className="plain-list">
-        {state.accounts.map((account) => (
-          <li key={account.id} className="row">
-            <div>
-              <p className="row-amount">{formatMoney(accountBalance(state, account), state.settings.currency)}</p>
-              <p className="row-meta">
-                {account.name} · {ACCOUNT_KINDS.find((k) => k.id === account.kind)?.label}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {state.accounts.length === 0 ? (
+        <p className="empty">No wallets yet. Add one below to start tracking.</p>
+      ) : (
+        <ul className="plain-list">
+          {state.accounts.map((account) => (
+            <li key={account.id} className="row">
+              <div>
+                <p className="row-amount">{formatMoney(accountBalance(state, account), state.settings.currency)}</p>
+                <p className="row-meta">
+                  {account.name} · {ACCOUNT_KINDS.find((k) => k.id === account.kind)?.label}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <form className="card sheet-form" onSubmit={addWallet}>
         <h2>Add wallet</h2>

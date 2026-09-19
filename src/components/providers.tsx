@@ -6,21 +6,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { hashPassword } from "@/lib/crypto";
-import { createSeedState } from "@/lib/seed";
-import {
-  loadLedger,
-  loadSession,
-  loadUsers,
-  saveLedger,
-  saveSession,
-  saveUsers,
-  wipeUserData,
-} from "@/lib/storage";
+import { createEmptyState } from "@/lib/seed";
+import { loadLedgerState, saveLedgerState, wipeLedgerState } from "@/lib/supabase/ledger";
 import type { LedgerState, Session, ThemeMode } from "@/lib/types";
+import { createClient } from "@/utils/supabase/client";
 
 type AuthContextValue = {
   ready: boolean;
@@ -47,33 +40,82 @@ function applyTheme(theme: ThemeMode) {
   root.dataset.theme = dark ? "dark" : "light";
 }
 
+function authMessage(error: { message?: string } | null, fallback: string) {
+  return error?.message || fallback;
+}
+
 export function AppProviders({ children }: { children: ReactNode }) {
+  const supabase = useMemo(() => createClient(), []);
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [ledgerReady, setLedgerReady] = useState(false);
-  const [state, setLedgerState] = useState<LedgerState>(createSeedState);
+  const [state, setLedgerState] = useState<LedgerState>(createEmptyState);
+  const persistGen = useRef(0);
 
   useEffect(() => {
-    setSession(loadSession());
-    setAuthReady(true);
-  }, []);
+    let cancelled = false;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return;
+      const user = data.user;
+      setSession(user ? { userId: user.id, email: user.email ?? "" } : null);
+      setAuthReady(true);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, next) => {
+      const user = next?.user;
+      setSession(user ? { userId: user.id, email: user.email ?? "" } : null);
+      setAuthReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   useEffect(() => {
     if (!session) {
       setLedgerReady(false);
       return;
     }
-    const loaded = loadLedger(session.userId);
-    setLedgerState(loaded);
-    applyTheme(loaded.settings.theme);
-    setLedgerReady(true);
-  }, [session]);
+
+    let cancelled = false;
+    setLedgerReady(false);
+    loadLedgerState(supabase, session.userId, session.email)
+      .then((loaded) => {
+        if (cancelled) return;
+        setLedgerState(loaded);
+        applyTheme(loaded.settings.theme);
+        setLedgerReady(true);
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+        if (cancelled) return;
+        const fallback = createEmptyState();
+        setLedgerState(fallback);
+        applyTheme(fallback.settings.theme);
+        setLedgerReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, supabase]);
 
   useEffect(() => {
     if (!session || !ledgerReady) return;
-    saveLedger(session.userId, state);
     applyTheme(state.settings.theme);
-  }, [session, state, ledgerReady]);
+    const gen = ++persistGen.current;
+    const timer = window.setTimeout(() => {
+      saveLedgerState(supabase, session.userId, state).catch((error: unknown) => {
+        if (gen === persistGen.current) console.error(error);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [session, state, ledgerReady, supabase]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -84,49 +126,46 @@ export function AppProviders({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, [state.settings.theme]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const users = loadUsers();
-    const hash = await hashPassword(password);
-    const user = users.find((u) => u.email === email.trim().toLowerCase());
-    if (!user || user.passwordHash !== hash) {
-      return "Email or password is incorrect.";
-    }
-    const next = { userId: user.id, email: user.email };
-    saveSession(next);
-    setSession(next);
-    return null;
-  }, []);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (error || !data.user) return authMessage(error, "Email or password is incorrect.");
+      setSession({ userId: data.user.id, email: data.user.email ?? email.trim().toLowerCase() });
+      return null;
+    },
+    [supabase],
+  );
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    const normalized = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-      return "Enter a valid email address.";
-    }
-    if (password.length < 8) {
-      return "Use at least 8 characters for your password.";
-    }
-    const users = loadUsers();
-    if (users.some((u) => u.email === normalized)) {
-      return "An account with that email already exists.";
-    }
-    const user = {
-      id: crypto.randomUUID(),
-      email: normalized,
-      passwordHash: await hashPassword(password),
-      createdAt: new Date().toISOString(),
-    };
-    saveUsers([...users, user]);
-    saveLedger(user.id, createSeedState());
-    const next = { userId: user.id, email: user.email };
-    saveSession(next);
-    setSession(next);
-    return null;
-  }, []);
+  const signUp = useCallback(
+    async (email: string, password: string) => {
+      const normalized = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        return "Enter a valid email address.";
+      }
+      if (password.length < 8) {
+        return "Use at least 8 characters for your password.";
+      }
+      const { data, error } = await supabase.auth.signUp({
+        email: normalized,
+        password,
+      });
+      if (error) return authMessage(error, "Could not create that account.");
+      if (!data.session || !data.user) {
+        return "Check your email to confirm the account, then sign in.";
+      }
+      setSession({ userId: data.user.id, email: data.user.email ?? normalized });
+      return null;
+    },
+    [supabase],
+  );
 
   const signOut = useCallback(() => {
-    saveSession(null);
+    void supabase.auth.signOut();
     setSession(null);
-  }, []);
+  }, [supabase]);
 
   const setState = useCallback(
     (next: LedgerState | ((prev: LedgerState) => LedgerState)) => {
@@ -137,11 +176,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const wipe = useCallback(() => {
     if (!session) return;
-    const fresh = createSeedState();
-    wipeUserData(session.userId);
-    saveLedger(session.userId, fresh);
-    setLedgerState(fresh);
-  }, [session]);
+    void wipeLedgerState(supabase, session.userId).then((fresh) => {
+      setLedgerState(fresh);
+    });
+  }, [session, supabase]);
 
   const authValue = useMemo(
     () => ({ ready: authReady, session, signIn, signUp, signOut }),

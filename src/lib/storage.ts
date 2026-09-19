@@ -1,4 +1,4 @@
-import { createSeedState } from "./seed";
+import { createEmptyState } from "./seed";
 import type { LedgerState, Session, UserRecord } from "./types";
 
 const USERS_KEY = "ledger.users.v2";
@@ -39,7 +39,7 @@ export function saveSession(session: Session | null): void {
 export function loadLedger(userId: string): LedgerState {
   const stored = readJson<LedgerState | null>(dataKey(userId), null);
   if (stored && Array.isArray(stored.transactions)) return stored;
-  return createSeedState();
+  return createEmptyState();
 }
 
 export function saveLedger(userId: string, state: LedgerState): void {

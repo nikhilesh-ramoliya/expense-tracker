@@ -1,18 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { AppProviders } from "@/components/providers";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
-
-const sans = Source_Sans_3({
-  subsets: ["latin"],
-  variable: "--font-sans-loaded",
-});
-
-const display = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-display-loaded",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -42,8 +31,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable} h-full`} suppressHydrationWarning>
-      <body className="min-h-full antialiased">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className="min-h-full">
         <ServiceWorkerRegister />
         <AppProviders>{children}</AppProviders>
       </body>
