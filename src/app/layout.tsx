@@ -31,8 +31,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
-      <body className="min-h-full">
+    <html lang="en" suppressHydrationWarning>
+      <body>
         <ServiceWorkerRegister />
         <AppProviders>{children}</AppProviders>
       </body>
