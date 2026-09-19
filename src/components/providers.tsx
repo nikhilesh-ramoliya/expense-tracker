@@ -18,7 +18,9 @@ import {
   markPasswordRecovery,
   urlLooksLikeRecovery,
 } from "@/lib/password-recovery";
-import { loadLedgerState, saveLedgerState, wipeLedgerState } from "@/lib/supabase/ledger";
+import { getSnapshot, putSnapshot, queueLength } from "@/lib/offline/idb";
+import { enqueueSave, enqueueWipe, flushQueue, isLikelyOffline } from "@/lib/offline/sync";
+import { loadLedgerState } from "@/lib/supabase/ledger";
 import type { LedgerState, Session, ThemeMode } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
 
@@ -39,11 +41,18 @@ type AuthContextValue = {
   signOut: () => void;
 };
 
+export type SyncStatusValue = {
+  online: boolean;
+  pending: number;
+  syncing: boolean;
+};
+
 type LedgerContextValue = {
   ready: boolean;
   state: LedgerState;
   setState: (next: LedgerState | ((prev: LedgerState) => LedgerState)) => void;
   wipe: () => void;
+  sync: SyncStatusValue;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -70,6 +79,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [ledgerReady, setLedgerReady] = useState(false);
   const [state, setLedgerState] = useState<LedgerState>(createEmptyState);
   const persistGen = useRef(0);
+  const lastLoadedJson = useRef<string | null>(null);
+  const [online, setOnline] = useState(true);
+  const [pending, setPending] = useState(0);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (hasPasswordRecoveryFlag() || urlLooksLikeRecovery()) {
@@ -88,12 +101,32 @@ export function AppProviders({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      const user = data.user;
+    const applyUser = (user: { id: string; email?: string | null } | null) => {
       setSession(user ? { userId: user.id, email: user.email ?? "" } : null);
       setAuthReady(true);
-    });
+    };
+
+    const restoreSession = async () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        const { data } = await supabase.auth.getSession();
+        if (!cancelled) applyUser(data.session?.user ?? null);
+        return;
+      }
+      const { data, error } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (data.user) {
+        applyUser(data.user);
+        return;
+      }
+      if (error) {
+        const { data: fallback } = await supabase.auth.getSession();
+        if (!cancelled) applyUser(fallback.session?.user ?? null);
+        return;
+      }
+      applyUser(null);
+    };
+
+    void restoreSession();
 
     const {
       data: { subscription },
@@ -116,6 +149,32 @@ export function AppProviders({ children }: { children: ReactNode }) {
     };
   }, [supabase, router]);
 
+  const refreshPending = useCallback(async (userId: string) => {
+    setPending(await queueLength(userId));
+  }, []);
+
+  const runFlush = useCallback(
+    async (userId: string) => {
+      setSyncing(true);
+      const result = await flushQueue(supabase, userId);
+      setPending(result.pending);
+      setSyncing(false);
+      return result;
+    },
+    [supabase],
+  );
+
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    updateOnline();
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
+
   useEffect(() => {
     if (!session || passwordRecovery) {
       setLedgerReady(false);
@@ -124,38 +183,114 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     setLedgerReady(false);
-    loadLedgerState(supabase, session.userId, session.email)
-      .then((loaded) => {
+
+    const hydrate = async () => {
+      const cached = await getSnapshot(session.userId);
+      if (cancelled) return;
+      if (cached) {
+        lastLoadedJson.current = JSON.stringify(cached);
+        setLedgerState(cached);
+        applyTheme(cached.settings.theme);
+        setLedgerReady(true);
+      }
+
+      await refreshPending(session.userId);
+      if (cancelled) return;
+
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        if (!cached) {
+          const empty = createEmptyState();
+          lastLoadedJson.current = JSON.stringify(empty);
+          setLedgerState(empty);
+          applyTheme(empty.settings.theme);
+          setLedgerReady(true);
+        }
+        return;
+      }
+
+      const flushed = await runFlush(session.userId);
+      if (cancelled) return;
+      if (flushed.pending > 0) {
+        if (!cached) {
+          const empty = createEmptyState();
+          lastLoadedJson.current = JSON.stringify(empty);
+          setLedgerState(empty);
+          applyTheme(empty.settings.theme);
+          setLedgerReady(true);
+        }
+        return;
+      }
+
+      try {
+        const loaded = await loadLedgerState(supabase, session.userId, session.email);
         if (cancelled) return;
+        lastLoadedJson.current = JSON.stringify(loaded);
         setLedgerState(loaded);
         applyTheme(loaded.settings.theme);
+        await putSnapshot(session.userId, loaded);
         setLedgerReady(true);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         console.error(error);
         if (cancelled) return;
-        const fallback = createEmptyState();
-        setLedgerState(fallback);
-        applyTheme(fallback.settings.theme);
+        if (!cached) {
+          const fallback = createEmptyState();
+          lastLoadedJson.current = JSON.stringify(fallback);
+          setLedgerState(fallback);
+          applyTheme(fallback.settings.theme);
+        }
         setLedgerReady(true);
-      });
+      }
+    };
+
+    void hydrate();
 
     return () => {
       cancelled = true;
     };
-  }, [session, passwordRecovery, supabase]);
+  }, [session, passwordRecovery, supabase, refreshPending, runFlush]);
 
   useEffect(() => {
     if (!session || !ledgerReady || passwordRecovery) return;
     applyTheme(state.settings.theme);
+    const serialized = JSON.stringify(state);
+    void putSnapshot(session.userId, state);
+    if (serialized === lastLoadedJson.current) return;
+
     const gen = ++persistGen.current;
     const timer = window.setTimeout(() => {
-      saveLedgerState(supabase, session.userId, state).catch((error: unknown) => {
-        if (gen === persistGen.current) console.error(error);
-      });
+      void (async () => {
+        await enqueueSave(session.userId, state);
+        if (gen !== persistGen.current) return;
+        await refreshPending(session.userId);
+        if (navigator.onLine) {
+          const result = await runFlush(session.userId);
+          if (result.error && !isLikelyOffline(result.error)) {
+            console.error(result.error);
+          }
+        }
+      })();
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [session, state, ledgerReady, passwordRecovery, supabase]);
+  }, [session, state, ledgerReady, passwordRecovery, refreshPending, runFlush]);
+
+  useEffect(() => {
+    if (!session || !ledgerReady || passwordRecovery) return;
+    const userId = session.userId;
+    const kick = () => {
+      void runFlush(userId);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") kick();
+    };
+    window.addEventListener("online", kick);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(kick, 45_000);
+    return () => {
+      window.removeEventListener("online", kick);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [session, ledgerReady, passwordRecovery, runFlush]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -168,6 +303,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        return "You need to be online to sign in. Cached sessions still work if you were already signed in.";
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
@@ -181,6 +319,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(
     async (email: string, password: string): Promise<SignUpOutcome> => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        return { status: "error", message: "You need to be online to create an account." };
+      }
       const normalized = email.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
         return { status: "error", message: "Enter a valid email address." };
@@ -249,10 +390,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const wipe = useCallback(() => {
     if (!session) return;
-    void wipeLedgerState(supabase, session.userId).then((fresh) => {
-      setLedgerState(fresh);
-    });
-  }, [session, supabase]);
+    const fresh = createEmptyState();
+    lastLoadedJson.current = null;
+    setLedgerState(fresh);
+    void (async () => {
+      await putSnapshot(session.userId, fresh);
+      await enqueueWipe(session.userId);
+      await refreshPending(session.userId);
+      if (navigator.onLine) await runFlush(session.userId);
+    })();
+  }, [session, refreshPending, runFlush]);
 
   const authValue = useMemo(
     () => ({
@@ -277,9 +424,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
     ],
   );
 
+  const sync = useMemo(
+    () => ({ online, pending, syncing }),
+    [online, pending, syncing],
+  );
+
   const ledgerValue = useMemo(
-    () => ({ ready: ledgerReady, state, setState, wipe }),
-    [ledgerReady, state, setState, wipe],
+    () => ({ ready: ledgerReady, state, setState, wipe, sync }),
+    [ledgerReady, state, setState, wipe, sync],
   );
 
   return (

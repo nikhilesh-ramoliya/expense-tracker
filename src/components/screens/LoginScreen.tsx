@@ -3,10 +3,12 @@
 import { FormEvent, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/providers";
+import { useAuth, useLedger } from "@/components/providers";
+import { SyncStatus } from "@/components/SyncStatus";
 
 export function LoginScreen() {
   const { ready, session, passwordRecovery, signIn, signUp, resendConfirmation } = useAuth();
+  const { sync } = useLedger();
   const router = useRouter();
   const formId = useId();
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -81,6 +83,7 @@ export function LoginScreen() {
         Skip to sign in
       </a>
       <header className="auth-hero">
+        <SyncStatus />
         <p className="eyebrow">Personal ledger</p>
         <h1 className="display">Ledger</h1>
         <p className="lede">
@@ -93,6 +96,7 @@ export function LoginScreen() {
         <h2>{mode === "in" ? "Sign in" : "Create account"}</h2>
         <p className="muted-copy">
           Sign in with email and password. New accounts start empty until you add entries.
+          {!sync.online ? " Creating an account requires a connection." : ""}
         </p>
         <form className="sheet-form" onSubmit={onSubmit} noValidate>
           <label htmlFor={`${formId}-email`}>Email</label>
@@ -145,7 +149,12 @@ export function LoginScreen() {
           <button
             type="button"
             className="text-btn"
+            disabled={!sync.online && mode === "in"}
             onClick={() => {
+              if (!sync.online && mode === "in") {
+                setError("You need to be online to create an account.");
+                return;
+              }
               setError("");
               setNotice("");
               setPendingConfirmEmail("");
