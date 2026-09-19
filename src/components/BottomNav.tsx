@@ -16,8 +16,8 @@ type IconName = (typeof ITEMS)[number]["icon"];
 function TabIcon({ name, filled }: { name: IconName; filled: boolean }) {
   const stroke = filled ? 0 : 1.7;
   const common = {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     viewBox: "0 0 24 24",
     "aria-hidden": true,
   } as const;
@@ -130,23 +130,28 @@ export function BottomNav() {
 
   return (
     <nav className="bottom-nav" aria-label="Primary">
-      {ITEMS.map((item) => {
-        const current =
-          item.href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={current ? "nav-item nav-on" : "nav-item"}
-            aria-current={current ? "page" : undefined}
-          >
-            <TabIcon name={item.icon} filled={current} />
-            <span className="nav-label">{item.label}</span>
-          </Link>
-        );
-      })}
+      <div className="bottom-nav-glass" aria-hidden="true" />
+      <div className="bottom-nav-items">
+        {ITEMS.map((item) => {
+          const current =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={current ? "nav-item nav-on" : "nav-item"}
+              aria-current={current ? "page" : undefined}
+            >
+              <span className="nav-glyph">
+                <TabIcon name={item.icon} filled={current} />
+              </span>
+              <span className="nav-label">{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }
