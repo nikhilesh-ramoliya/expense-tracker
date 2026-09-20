@@ -3,12 +3,31 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
+type LiquidRenderer = {
+  lenses?: { el?: Element }[];
+  captureSnapshot?: () => void;
+};
+
 function prefersReducedTransparency(): boolean {
   return window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
 }
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function renderer(): LiquidRenderer | undefined {
+  return (window as Window & { __liquidGLRenderer__?: LiquidRenderer }).__liquidGLRenderer__;
+}
+
+function pruneDeadLenses() {
+  const gl = renderer();
+  if (!gl?.lenses) return;
+  gl.lenses = gl.lenses.filter((lens) => Boolean(lens.el?.isConnected));
+}
+
+function navHasLiveLens(nav: Element): boolean {
+  return Boolean(renderer()?.lenses?.some((lens) => lens.el === nav && nav.isConnected));
 }
 
 export function LiquidGlass() {
@@ -23,10 +42,11 @@ export function LiquidGlass() {
       const liquidGL = (await import("liquid-gl")).default;
       if (cancelled) return;
 
-      if (!(window as Window & { __ledgerLiquidInit?: boolean }).__ledgerLiquidInit) {
-        const target = document.querySelector(".liquid-nav");
-        if (!target) return;
+      pruneDeadLenses();
+      const nav = document.querySelector(".liquid-nav");
+      if (!nav) return;
 
+      if (!navHasLiveLens(nav)) {
         liquidGL({
           target: ".liquid-nav",
           snapshot: "html",
@@ -42,12 +62,10 @@ export function LiquidGlass() {
           tilt: false,
           magnify: 1,
         });
-        liquidGL.registerDynamic(".main-pane");
-        (window as Window & { __ledgerLiquidInit?: boolean }).__ledgerLiquidInit = true;
-        return;
       }
 
       liquidGL.registerDynamic(".main-pane");
+      renderer()?.captureSnapshot?.();
     })();
 
     return () => {
