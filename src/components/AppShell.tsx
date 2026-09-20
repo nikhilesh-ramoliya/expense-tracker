@@ -1,4 +1,5 @@
 import { BottomNav } from "./BottomNav";
+import { LiquidGlass } from "./LiquidGlass";
 import { RequireAuth } from "./RequireAuth";
 import { SyncStatus } from "./SyncStatus";
 
@@ -14,6 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
         <BottomNav />
+        <LiquidGlass />
       </RequireAuth>
     </div>
   );

@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  transpilePackages: ["liquid-gl"],
   experimental: {
     useOffline: true,
   },

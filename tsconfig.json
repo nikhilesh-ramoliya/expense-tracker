@@ -24,6 +24,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "liquid-gl.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
