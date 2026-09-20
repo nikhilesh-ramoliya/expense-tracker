@@ -6,6 +6,14 @@ function num(value: unknown) {
   return Number(value ?? 0);
 }
 
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function uuidOrNull(value: string | null | undefined): string | null {
+  if (!value || value === "null" || value === "undefined") return null;
+  return UUID.test(value) ? value : null;
+}
+
 export async function loadLedgerState(
   supabase: SupabaseClient,
   userId: string,
@@ -168,21 +176,31 @@ export async function saveLedgerState(
     if (error) throw error;
   }
 
-  if (state.transactions.length) {
-    const { error } = await supabase.from("transactions").upsert(
-      state.transactions.map((tx) => ({
+  const rows = state.transactions
+    .map((tx) => {
+      const accountId = uuidOrNull(tx.accountId);
+      if (!accountId || !accountIds.has(accountId)) {
+        throw new Error(`Cannot sync transaction ${tx.id}: wallet ${tx.accountId ?? "missing"} is not in the ledger`);
+      }
+      return {
         id: tx.id,
         user_id: userId,
         amount: tx.amount,
         type: tx.type,
-        category_id: tx.categoryId,
-        account_id: tx.accountId,
-        to_account_id: tx.toAccountId,
+        category_id: uuidOrNull(tx.categoryId) && categoryIds.has(tx.categoryId ?? "") ? tx.categoryId : null,
+        account_id: accountId,
+        to_account_id:
+          tx.type === "transfer" && uuidOrNull(tx.toAccountId) && accountIds.has(tx.toAccountId ?? "")
+            ? tx.toAccountId
+            : null,
         date: tx.date,
-        note: tx.note,
-        merchant: tx.merchant,
-      })),
-    );
+        note: tx.note ?? "",
+        merchant: tx.merchant ?? "",
+      };
+    });
+
+  if (rows.length) {
+    const { error } = await supabase.from("transactions").upsert(rows);
     if (error) throw error;
   }
 }

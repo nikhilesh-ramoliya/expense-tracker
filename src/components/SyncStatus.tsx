@@ -7,13 +7,15 @@ export function SyncStatus() {
   const label = !sync.online
     ? "Offline"
     : sync.pending > 0
-      ? `Pending sync (${sync.pending})`
+      ? sync.lastError
+        ? `Pending sync (${sync.pending}) · retrying`
+        : `Pending sync (${sync.pending})`
       : sync.syncing
         ? "Syncing"
         : "Synced";
 
   return (
-    <p className="sync-status" role="status" aria-live="polite">
+    <p className="sync-status" role="status" aria-live="polite" title={sync.lastError ?? undefined}>
       {label}
     </p>
   );

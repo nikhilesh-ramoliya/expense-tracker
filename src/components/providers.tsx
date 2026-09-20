@@ -19,7 +19,7 @@ import {
   urlLooksLikeRecovery,
 } from "@/lib/password-recovery";
 import { getSnapshot, putSnapshot, queueLength } from "@/lib/offline/idb";
-import { enqueueSave, enqueueWipe, flushQueue, isLikelyOffline } from "@/lib/offline/sync";
+import { enqueueSave, enqueueWipe, flushQueue, formatSyncError, isLikelyOffline } from "@/lib/offline/sync";
 import { loadLedgerState } from "@/lib/supabase/ledger";
 import type { LedgerState, Session, ThemeMode } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
@@ -45,6 +45,7 @@ export type SyncStatusValue = {
   online: boolean;
   pending: number;
   syncing: boolean;
+  lastError: string | null;
 };
 
 type LedgerContextValue = {
@@ -83,6 +84,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
     if (hasPasswordRecoveryFlag() || urlLooksLikeRecovery()) {
@@ -158,6 +160,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
       setSyncing(true);
       const result = await flushQueue(supabase, userId);
       setPending(result.pending);
+      if (result.error) {
+        const message = formatSyncError(result.error);
+        setLastError(message);
+        console.error("[ledger sync]", message, result.error);
+      } else if (result.pending === 0) {
+        setLastError(null);
+      }
       setSyncing(false);
       return result;
     },
@@ -264,8 +273,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
         await refreshPending(session.userId);
         if (navigator.onLine) {
           const result = await runFlush(session.userId);
-          if (result.error && !isLikelyOffline(result.error)) {
-            console.error(result.error);
+          if (result.error) {
+            console.error("[ledger sync] persist flush", formatSyncError(result.error), result.error);
+            if (!isLikelyOffline(result.error)) setLastError(formatSyncError(result.error));
           }
         }
       })();
@@ -425,8 +435,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
 
   const sync = useMemo(
-    () => ({ online, pending, syncing }),
-    [online, pending, syncing],
+    () => ({ online, pending, syncing, lastError }),
+    [online, pending, syncing, lastError],
   );
 
   const ledgerValue = useMemo(

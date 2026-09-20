@@ -146,7 +146,7 @@ export async function listQueue(userId: string): Promise<QueueOp[]> {
   });
 }
 
-export async function enqueueOp(userId: string, kind: QueueKind, state: LedgerState | null): Promise<void> {
+async function writeQueueOp(userId: string, kind: QueueKind, state: LedgerState | null): Promise<void> {
   await withDb(async (db) => {
     const op: Omit<QueueOp, "id"> & { id?: number } = {
       userId,
@@ -170,6 +170,16 @@ export async function enqueueOp(userId: string, kind: QueueKind, state: LedgerSt
       tx.onerror = () => reject(tx.error);
     });
   });
+}
+
+export async function enqueueOp(userId: string, kind: QueueKind, state: LedgerState | null): Promise<void> {
+  if (kind === "save") {
+    const existing = await listQueue(userId);
+    await Promise.all(
+      existing.filter((op) => op.kind === "save").map((op) => removeQueueOp(userId, op.id)),
+    );
+  }
+  await writeQueueOp(userId, kind, state);
 }
 
 export async function removeQueueOp(userId: string, id: number): Promise<void> {
