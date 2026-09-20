@@ -63,9 +63,15 @@ export function AccountsScreen() {
           {state.accounts.map((account) => (
             <li key={account.id} className="row">
               <div>
-                <p className="row-amount">{formatMoney(accountBalance(state, account), state.settings.currency)}</p>
+                <p className="row-amount">
+                  <span className="txt">
+                    {formatMoney(accountBalance(state, account), state.settings.currency)}
+                  </span>
+                </p>
                 <p className="row-meta">
-                  {account.name} · {ACCOUNT_KINDS.find((k) => k.id === account.kind)?.label}
+                  <span className="txt">
+                    {account.name} · {ACCOUNT_KINDS.find((k) => k.id === account.kind)?.label}
+                  </span>
                 </p>
               </div>
             </li>

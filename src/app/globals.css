@@ -62,9 +62,6 @@ body,
   min-height: 100svh;
   min-height: 100dvh;
   min-height: 100lvh;
-  filter: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
 html,
@@ -89,63 +86,20 @@ html[data-theme="dark"] {
     linear-gradient(165deg, #1a1612 0%, #12100e 55%, #0e0c0a 100%);
 }
 
-/*
-  iOS last-letter doubling:
-  Naming "SF Pro Text" loads a separate named/variable face instead of the
-  system-ui path. That face has built-in tracking. Combined with an explicit
-  letter-spacing + geometricPrecision, WebKit paints the last glyph twice.
-*/
-html,
-body,
-button,
-a,
-input,
-select,
-textarea,
-label,
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-span {
-  font-family: system-ui, -apple-system, sans-serif;
-  letter-spacing: 0 !important;
-  font-kerning: none;
-  font-variant-ligatures: none;
-  -webkit-font-variant-ligatures: none;
-  font-feature-settings: "kern" 0, "liga" 0;
-  text-rendering: optimizeSpeed;
-  -webkit-text-stroke: 0;
-  text-shadow: none;
-  font-synthesis: none;
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-autospace: no-autospace;
-}
-
 html,
 body {
+  font-family: system-ui, -apple-system, sans-serif;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
-html *,
-html *::before,
-html *::after {
-  font-family: inherit;
-  letter-spacing: 0 !important;
-  font-kerning: none;
-  font-variant-ligatures: none;
-  -webkit-font-variant-ligatures: none;
-  font-feature-settings: "kern" 0, "liga" 0;
-  text-rendering: optimizeSpeed;
-  -webkit-text-stroke: 0;
-  text-shadow: none;
-  font-synthesis: none;
-  -webkit-font-smoothing: auto;
+/* Bare label face. No tracking, smoothing, or inherited OpenType extras. */
+.txt {
+  font: 16px/1.3 system-ui;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+  display: inline-block;
+  transform: translateZ(0);
 }
 
 body {
@@ -426,7 +380,6 @@ html[data-theme="dark"] .chip-on {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 .row-meta,

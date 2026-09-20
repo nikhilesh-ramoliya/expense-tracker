@@ -98,14 +98,22 @@ export function TransactionsScreen() {
             <li key={tx.id} className="row">
               <Link href={`/transactions/${tx.id}`} className="row-grow">
                 <p className="row-amount">
-                  {tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "↔"}{" "}
-                  {formatMoney(tx.amount, state.settings.currency)}
+                  <span className="txt">
+                    {tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "↔"}{" "}
+                    {formatMoney(tx.amount, state.settings.currency)}
+                  </span>
                 </p>
                 <p className="row-meta">
-                  {categoryName(state, tx.categoryId)} · {formatDay(tx.date)}
-                  {tx.merchant ? ` · ${tx.merchant}` : ""}
+                  <span className="txt">
+                    {categoryName(state, tx.categoryId)} · {formatDay(tx.date)}
+                    {tx.merchant ? ` · ${tx.merchant}` : ""}
+                  </span>
                 </p>
-                {tx.note ? <p className="row-note">{tx.note}</p> : null}
+                {tx.note ? (
+                  <p className="row-note">
+                    <span className="txt">{tx.note}</span>
+                  </p>
+                ) : null}
               </Link>
               <button
                 type="button"
@@ -119,7 +127,7 @@ export function TransactionsScreen() {
                 }}
                 aria-label={`Delete ${formatMoney(tx.amount, state.settings.currency)} ${categoryName(state, tx.categoryId)}`}
               >
-                Delete
+                <span className="txt">Delete</span>
               </button>
             </li>
           ))}

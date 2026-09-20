@@ -70,12 +70,16 @@ export function DashboardScreen() {
                 <Link href={`/transactions/${tx.id}`} className="row row-link">
                   <div>
                     <p className="row-amount">
-                      {tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "↔"}{" "}
-                      {formatMoney(tx.amount, state.settings.currency)}
+                      <span className="txt">
+                        {tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "↔"}{" "}
+                        {formatMoney(tx.amount, state.settings.currency)}
+                      </span>
                     </p>
                     <p className="row-meta">
-                      {categoryName(state, tx.categoryId)} · {formatDay(tx.date)}
-                      {tx.merchant ? ` · ${tx.merchant}` : ""}
+                      <span className="txt">
+                        {categoryName(state, tx.categoryId)} · {formatDay(tx.date)}
+                        {tx.merchant ? ` · ${tx.merchant}` : ""}
+                      </span>
                     </p>
                   </div>
                 </Link>
