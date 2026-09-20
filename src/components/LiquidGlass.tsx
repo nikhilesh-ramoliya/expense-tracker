@@ -64,6 +64,12 @@ export function LiquidGlass() {
         });
       }
 
+      const items = nav.querySelector(".bottom-nav-items");
+      if (items instanceof HTMLElement) items.style.pointerEvents = "auto";
+      nav.querySelectorAll(".nav-item").forEach((item) => {
+        if (item instanceof HTMLElement) item.style.pointerEvents = "auto";
+      });
+
       liquidGL.registerDynamic(".main-pane");
       renderer()?.captureSnapshot?.();
     })();

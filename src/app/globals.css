@@ -795,6 +795,11 @@ html[data-theme="dark"] .meter {
   border: 0.5px solid rgb(255 255 255 / 0.35);
 }
 
+.bottom-nav-items,
+.nav-item {
+  pointer-events: auto;
+}
+
 .bottom-nav-items {
   position: relative;
   z-index: 3;
