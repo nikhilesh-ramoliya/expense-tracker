@@ -43,10 +43,10 @@ export function LiquidGlass() {
       if (cancelled) return;
 
       pruneDeadLenses();
-      const nav = document.querySelector(".liquid-nav");
-      if (!nav) return;
+      const pane = document.querySelector(".liquid-nav");
+      if (!pane) return;
 
-      if (!navHasLiveLens(nav)) {
+      if (!navHasLiveLens(pane)) {
         liquidGL({
           target: ".liquid-nav",
           snapshot: "html",
@@ -64,9 +64,16 @@ export function LiquidGlass() {
         });
       }
 
-      const items = nav.querySelector(".bottom-nav-items");
-      if (items instanceof HTMLElement) items.style.pointerEvents = "auto";
-      nav.querySelectorAll(".nav-item").forEach((item) => {
+      if (pane instanceof HTMLElement) pane.style.pointerEvents = "none";
+      document.querySelectorAll("canvas[data-liquid-ignore]").forEach((node) => {
+        if (node instanceof HTMLElement) {
+          node.style.pointerEvents = "none";
+          node.style.zIndex = "1";
+        }
+      });
+      const bar = document.querySelector(".bottom-nav");
+      if (bar instanceof HTMLElement) bar.style.pointerEvents = "auto";
+      document.querySelectorAll(".nav-item").forEach((item) => {
         if (item instanceof HTMLElement) item.style.pointerEvents = "auto";
       });
 

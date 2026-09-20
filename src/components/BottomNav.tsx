@@ -129,28 +129,31 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="bottom-nav liquid-nav" aria-label="Primary">
-      <div className="bottom-nav-items">
-        {ITEMS.map((item) => {
-          const current =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={current ? "nav-item nav-on" : "nav-item"}
-              aria-current={current ? "page" : undefined}
-            >
-              <span className="nav-glyph">
-                <TabIcon name={item.icon} filled={current} />
-              </span>
-              <span className="nav-label">{item.label}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <div className="bottom-nav-slot">
+      <div className="liquid-nav" aria-hidden="true" />
+      <nav className="bottom-nav" aria-label="Primary">
+        <div className="bottom-nav-items">
+          {ITEMS.map((item) => {
+            const current =
+              item.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={current ? "nav-item nav-on" : "nav-item"}
+                aria-current={current ? "page" : undefined}
+              >
+                <span className="nav-glyph">
+                  <TabIcon name={item.icon} filled={current} />
+                </span>
+                <span className="nav-label">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
   );
 }
